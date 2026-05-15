@@ -21,6 +21,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -71,6 +72,36 @@ func numatopoIsExist(client *versioned.Clientset) (bool, error) {
 	return true, nil
 }
 
+func startHealthServer(ctx context.Context, addr string) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = fmt.Fprintln(w, "ok")
+	})
+
+	server := &http.Server{
+		Addr:              addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	go func() {
+		klog.Infof("Health server listening on %s", addr)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			klog.Errorf("Health server failed: %v", err)
+		}
+	}()
+
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			klog.Errorf("Health server shutdown failed: %v", err)
+		}
+	}()
+}
+
 func main() {
 	klog.InitFlags(nil)
 
@@ -97,6 +128,10 @@ func main() {
 	}
 
 	klog.Infof("Starting resource-exporter with check interval %v", opt.CheckInterval)
+
+	if opt.HealthAddr != "" {
+		startHealthServer(ctx, opt.HealthAddr)
+	}
 
 	tick := time.NewTicker(opt.CheckInterval)
 	defer tick.Stop()

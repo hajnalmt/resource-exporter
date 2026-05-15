@@ -13,6 +13,7 @@ import (
 
 const (
 	defaultCheckInterval = 3 * time.Second
+	defaultHealthAddr    = ":8081"
 )
 
 // ClientOptions used to build kube rest config.
@@ -27,6 +28,7 @@ type Argument struct {
 	KubeletConf       string
 	DevicePath        string
 	CPUMngState       string
+	HealthAddr        string
 	ResReserved       map[string]string
 	KubeClientOptions ClientOptions
 }
@@ -44,6 +46,7 @@ func (args *Argument) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&args.KubeletConf, "kubelet-conf", args.KubeletConf, "Path to kubelet configure file")
 	fs.StringVar(&args.DevicePath, "device-path", args.DevicePath, "Path to device information")
 	fs.StringVar(&args.CPUMngState, "cpu-manager-state", args.CPUMngState, "Path to cpu_manager_state")
+	fs.StringVar(&args.HealthAddr, "health-addr", defaultHealthAddr, "Address to serve health check endpoint (set to empty to disable)")
 	fs.Var(cliflag.NewMapStringString(&args.ResReserved), "res-reserved", "kubelet reserved resource  (e.g. cpu=200m,memory=500Mi")
 
 	fs.StringVar(&args.KubeClientOptions.Master, "master", args.KubeClientOptions.Master, "The address of the Kubernetes API server (overrides any value in kubeconfig)")

@@ -40,6 +40,13 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
 # cpu_manager_state file which is owner-only (0600, root:root).
 FROM alpine:latest
 
+LABEL org.opencontainers.image.source="https://github.com/volcano-sh/resource-exporter" \
+      org.opencontainers.image.title="numatopo" \
+      org.opencontainers.image.description="NUMA topology exporter for the Volcano scheduler" \
+      org.opencontainers.image.vendor="The Volcano Authors" \
+      org.opencontainers.image.licenses="Apache-2.0"
+
 COPY --from=builder /numatopo /numatopo
 
+EXPOSE 8081
 ENTRYPOINT ["/numatopo"]
