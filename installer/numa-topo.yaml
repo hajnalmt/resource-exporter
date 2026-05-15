@@ -4,15 +4,6 @@ metadata:
   name: resource-exporter
   namespace: volcano-system
 rules:
-  - apiGroups: ["apiextensions.k8s.io"]
-    resources: ["customresourcedefinitions"]
-    verbs: ["create", "get", "list", "watch", "delete"]
-  - apiGroups: [""]
-    resources: ["persistentvolumeclaims"]
-    verbs: ["list", "watch"]
-  - apiGroups: [""]
-    resources: ["persistentvolumes"]
-    verbs: ["list", "watch"]
   - apiGroups: ["nodeinfo.volcano.sh"]
     resources: ["numatopologies"]
     verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
@@ -44,14 +35,20 @@ kind: DaemonSet
 metadata:
   name: resource-exporter-daemonset
   namespace: volcano-system
+  labels:
+    app.kubernetes.io/name: resource-exporter
+    app.kubernetes.io/component: numa-topology
+    app.kubernetes.io/part-of: volcano
 spec:
   selector:
     matchLabels:
-      name: resource-topology
+      app.kubernetes.io/name: resource-exporter
   template:
     metadata:
       labels:
-        name: resource-topology
+        app.kubernetes.io/name: resource-exporter
+        app.kubernetes.io/component: numa-topology
+        app.kubernetes.io/part-of: volcano
     spec:
       serviceAccountName: resource-exporter-account
       containers:
@@ -59,31 +56,56 @@ spec:
           image: volcanosh/numatopo:latest
           imagePullPolicy: IfNotPresent
           args:
-            - --logtostderr
-            - --kubelet-conf=/host/kubeletconf/config.yaml
+            - --kubelet-conf=/host/kubelet/config.yaml
             - --cpu-manager-state=/host/kubelet/cpu_manager_state
             - --device-path=/host/device
+            - --health-addr=:8081
             - -v=4
-            - 2>&1
+          ports:
+            - name: health
+              containerPort: 8081
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
           env:
             - name: MY_NODE_NAME
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           volumeMounts:
-            - name: node-path
+            - name: device-path
               mountPath: "/host/device"
+              readOnly: true
             - name: kubelet-path
               mountPath: "/host/kubelet"
-            - name: kubelet-config-path
-              mountPath: "/host/kubeletconf"
+              readOnly: true
       volumes:
-        - name: node-path
+        - name: device-path
           hostPath:
             path: "/sys/devices/system"
         - name: kubelet-path
-          hostPath:
-            path: "/var/lib/kubelet"
-        - name: kubelet-config-path
           hostPath:
             path: "/var/lib/kubelet"
