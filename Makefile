@@ -31,6 +31,9 @@ build: init
 unit-test:
 	go test -v ./pkg/...
 
+release-test:
+	./scripts/release_test.sh
+
 image: init fmt vet lint
 	docker build --no-cache \
 		--build-arg LD_FLAGS=${LD_FLAGS} \
@@ -42,8 +45,7 @@ release: init
 		--platform ${DOCKER_PLATFORMS} \
 		--output=type=${BUILDX_OUTPUT_TYPE} \
 		--build-arg LD_FLAGS=${LD_FLAGS} \
-		-t ${IMAGE_PREFIX}/${IMAGE_NAME}:${TAG} \
-		-t ${IMAGE_PREFIX}/${IMAGE_NAME}:${RELEASE_VER} \
+		$(foreach tag,$(IMAGE_TAGS),-t ${IMAGE_PREFIX}/${IMAGE_NAME}:$(tag) ) \
 		-f ./docker/Dockerfile .
 
 clean:
