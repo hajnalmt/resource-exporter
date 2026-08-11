@@ -16,7 +16,7 @@ permissions: read-all
 jobs:
   docker:
     permissions:
-      contents: write
+      contents: read
       packages: write
     runs-on: ubuntu-latest
     steps:
@@ -92,36 +92,6 @@ jobs:
             DOCKER_PLATFORMS="linux/amd64,linux/arm64" \
             BUILDX_OUTPUT_TYPE=registry \
             release
-
-      - name: Generate release manifest
-        id: manifest
-        if: steps.release.outputs.is_tag_build == 'true'
-        run: |
-          manifest_path="$(./scripts/release.sh generate-manifest \
-            "${{ steps.release.outputs.tag }}" "$RUNNER_TEMP")"
-          echo "path=$manifest_path" >> "$GITHUB_OUTPUT"
-
-      - name: Create or update GitHub Release
-        if: steps.release.outputs.is_tag_build == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          tag="${{ steps.release.outputs.tag }}"
-          manifest="${{ steps.manifest.outputs.path }}"
-
-          if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" "$manifest" --clobber
-          else
-            prerelease_flag=()
-            if [ "${{ steps.release.outputs.prerelease }}" = "true" ]; then
-              prerelease_flag+=(--prerelease)
-            fi
-            gh release create "$tag" "$manifest" \
-              --verify-tag \
-              --title "$tag" \
-              --generate-notes \
-              "${prerelease_flag[@]}"
-          fi
 
       - name: Logout from registries
         if: always()
