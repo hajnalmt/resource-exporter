@@ -16,7 +16,7 @@ permissions: read-all
 jobs:
   docker:
     permissions:
-      contents: read
+      contents: write
       packages: write
     runs-on: ubuntu-latest
     steps:
@@ -30,18 +30,23 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Determine image tag
+      - name: Determine release metadata
+        id: release
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           if [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            echo "TAG=${{ github.ref_name }}" >> $GITHUB_ENV
-            echo "RELEASE_VER=${{ github.ref_name }}" >> $GITHUB_ENV
+            ./scripts/release.sh metadata "$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+            echo "is_tag_build=true" >> "$GITHUB_OUTPUT"
           else
-            echo "TAG=latest" >> $GITHUB_ENV
-            echo "RELEASE_VER=latest" >> $GITHUB_ENV
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+            echo "version=latest" >> "$GITHUB_OUTPUT"
+            echo "image_tags=latest" >> "$GITHUB_OUTPUT"
+            echo "is_tag_build=false" >> "$GITHUB_OUTPUT"
           fi
           # Downcase the repository owner for GHCR / Docker compatibility
           OWNER="${{ github.repository_owner }}"
-          echo "REPO_OWNER=${OWNER,,}" >> $GITHUB_ENV
+          echo "REPO_OWNER=${OWNER,,}" >> "$GITHUB_ENV"
 
       - name: Cache Go modules
         uses: actions/cache@v4
@@ -65,7 +70,8 @@ jobs:
 
       - name: Release image to Docker Hub
         run: |
-          make TAG=${{ env.TAG }} RELEASE_VER=${{ env.RELEASE_VER }} \
+          make VERSION="${{ steps.release.outputs.version }}" \
+            IMAGE_TAGS="${{ steps.release.outputs.image_tags }}" \
             IMAGE_PREFIX=volcanosh \
             DOCKER_PLATFORMS="linux/amd64,linux/arm64" \
             BUILDX_OUTPUT_TYPE=registry \
@@ -80,11 +86,42 @@ jobs:
 
       - name: Release image to GitHub Container Registry
         run: |
-          make TAG=${{ env.TAG }} RELEASE_VER=${{ env.RELEASE_VER }} \
+          make VERSION="${{ steps.release.outputs.version }}" \
+            IMAGE_TAGS="${{ steps.release.outputs.image_tags }}" \
             IMAGE_PREFIX=ghcr.io/${{ env.REPO_OWNER }} \
             DOCKER_PLATFORMS="linux/amd64,linux/arm64" \
             BUILDX_OUTPUT_TYPE=registry \
             release
+
+      - name: Generate release manifest
+        id: manifest
+        if: steps.release.outputs.is_tag_build == 'true'
+        run: |
+          manifest_path="$(./scripts/release.sh generate-manifest \
+            "${{ steps.release.outputs.tag }}" "$RUNNER_TEMP")"
+          echo "path=$manifest_path" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update GitHub Release
+        if: steps.release.outputs.is_tag_build == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${{ steps.release.outputs.tag }}"
+          manifest="${{ steps.manifest.outputs.path }}"
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "$manifest" --clobber
+          else
+            prerelease_flag=()
+            if [ "${{ steps.release.outputs.prerelease }}" = "true" ]; then
+              prerelease_flag+=(--prerelease)
+            fi
+            gh release create "$tag" "$manifest" \
+              --verify-tag \
+              --title "$tag" \
+              --generate-notes \
+              "${prerelease_flag[@]}"
+          fi
 
       - name: Logout from registries
         if: always()

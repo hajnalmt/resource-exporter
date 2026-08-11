@@ -39,3 +39,6 @@ jobs:
 
       - name: Run unit tests
         run: make unit-test
+
+      - name: Run release helper tests
+        run: make release-test
