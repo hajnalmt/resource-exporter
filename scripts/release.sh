@@ -6,7 +6,6 @@ usage() {
   cat <<'EOF'
 Usage:
   release.sh metadata <git-tag>
-  release.sh generate-manifest <git-tag> <output-dir>
 EOF
 }
 
@@ -56,40 +55,6 @@ version=$tag
 prerelease=$prerelease
 image_tags=$image_tags
 EOF
-    ;;
-  generate-manifest)
-    tag="${2:-}"
-    output_dir="${3:-}"
-    require_tag "$tag"
-    if [[ -z "$output_dir" ]]; then
-      echo "output directory must not be empty" >&2
-      exit 1
-    fi
-
-    repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-    template="$repo_root/installer/numa-topo.yaml"
-    output_file="$output_dir/resource-exporter-$tag.yaml"
-    expected_image="volcanosh/numatopo:latest"
-    replacement_image="volcanosh/numatopo:$tag"
-    matches="$(awk -v needle="$expected_image" '
-      {
-        line = $0
-        while ((position = index(line, needle)) > 0) {
-          count++
-          line = substr(line, position + length(needle))
-        }
-      }
-      END { print count + 0 }
-    ' "$template")"
-
-    if [[ "$matches" -ne 1 ]]; then
-      echo "expected exactly one '$expected_image' image in $template, found $matches" >&2
-      exit 1
-    fi
-
-    mkdir -p "$output_dir"
-    sed "s|$expected_image|$replacement_image|" "$template" > "$output_file"
-    echo "$output_file"
     ;;
   *)
     usage >&2

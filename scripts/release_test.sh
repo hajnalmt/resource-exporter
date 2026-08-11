@@ -47,11 +47,6 @@ assert_not_contains "$tmpdir/prerelease.env" "latest"
 assert_contains "$tmpdir/stable.env" "prerelease=false"
 assert_contains "$tmpdir/stable.env" "image_tags=v1.2.3 latest"
 
-manifest="$("$script" generate-manifest "v1.2.3" "$tmpdir")"
-assert_contains "$manifest" "image: volcanosh/numatopo:v1.2.3"
-assert_not_contains "$manifest" "volcanosh/numatopo:latest"
-assert_contains "$repo_root/installer/numa-topo.yaml" "image: volcanosh/numatopo:latest"
-
 assert_fails_with "release tag must not be empty" "$script" metadata ""
 assert_fails_with "invalid release tag" "$script" metadata "latest"
 assert_fails_with "invalid release tag" "$script" metadata "v1.2.3-01"
